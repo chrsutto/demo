@@ -1,0 +1,46 @@
+{
+  "name": "stablecoin-yield-aggregator",
+  "version": "1.0.0",
+  "description": "Comprehensive web application aggregating stablecoin yields from Midas, Avant, Noon, YieldFi, Gauntlet, Pendle, Merkl, DeFi Llama, and more",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "node test-apis.js",
+    "test:bash": "bash test-apis.sh"
+  },
+  "keywords": [
+    "defi",
+    "stablecoin",
+    "yield",
+    "aggregator",
+    "crypto",
+    "finance",
+    "web3",
+    "ethereum",
+    "usdc",
+    "usdt"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-cache": "^5.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/stablecoin-yield-aggregator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/stablecoin-yield-aggregator/issues"
+  },
+  "homepage": "https://github.com/yourusername/stablecoin-yield-aggregator#readme"
+}

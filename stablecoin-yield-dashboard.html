@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stablecoin Yield Aggregator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .protocol-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 2px;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .yield-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .yield-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Mock data representing yields from various platforms
+        const mockYieldData = {
+            defillama: [
+                { protocol: "Aave V3", stablecoin: "USDC", chain: "Ethereum", apy: 6.14, tvl: 586030000, type: "Lending" },
+                { protocol: "Aave V3", stablecoin: "USDT", chain: "Ethereum", apy: 5.0, tvl: 629280000, type: "Lending" },
+                { protocol: "Aave V3", stablecoin: "DAI", chain: "Ethereum", apy: 6.44, tvl: 239430000, type: "Lending" },
+                { protocol: "Compound V3", stablecoin: "USDC", chain: "Ethereum", apy: 4.2, tvl: 450000000, type: "Lending" },
+                { protocol: "Morpho", stablecoin: "USDC", chain: "Ethereum", apy: 7.8, tvl: 320000000, type: "Lending" },
+                { protocol: "Curve", stablecoin: "USDT/USDC", chain: "Ethereum", apy: 3.5, tvl: 890000000, type: "LP" },
+            ],
+            midas: [
+                { protocol: "Midas mTBILL", stablecoin: "USDC", chain: "Ethereum", apy: 5.25, tvl: 45000000, type: "RWA", description: "Treasury-backed yield" },
+                { protocol: "Midas mBASIS", stablecoin: "USDC", chain: "Ethereum", apy: 12.5, tvl: 28000000, type: "Basis Trade", description: "Cash & carry basis trade" },
+                { protocol: "Midas mEDGE", stablecoin: "USDC", chain: "Ethereum", apy: 8.5, tvl: 12000000, type: "Delta Neutral", description: "Market-neutral DeFi yields" },
+                { protocol: "Midas mAPOLLO", stablecoin: "Multi-chain", chain: "Multi", apy: 9.2, tvl: 18000000, type: "Multi-Strategy", description: "Multi-chain stablecoin strategies" },
+            ],
+            avant: [
+                { protocol: "Avant avUSD", stablecoin: "USDC/USDT", chain: "Avalanche", apy: 15.8, tvl: 89000000, type: "Delta Neutral", description: "Market-neutral yield strategies" },
+                { protocol: "Avant savUSD", stablecoin: "avUSD", chain: "Avalanche", apy: 18.2, tvl: 67000000, type: "Staked", description: "Staked yield-bearing token" },
+            ],
+            noon: [
+                { protocol: "Noon USN", stablecoin: "USDC/USDT", chain: "Ethereum/zkSync", apy: 14.5, tvl: 33000000, type: "Delta Neutral", description: "Intelligent yield allocation" },
+                { protocol: "Noon sUSN", stablecoin: "USN", chain: "Ethereum/zkSync", apy: 17.5, tvl: 28000000, type: "Staked", description: "Staked yield-generating stablecoin" },
+            ],
+            yieldfi: [
+                { protocol: "YieldFi yUSD", stablecoin: "USDC/USDT", chain: "Multi-chain", apy: 23.5, tvl: 121000000, type: "Multi-Strategy", description: "Professional asset management ~25% APY" },
+                { protocol: "YieldFi vyUSD", stablecoin: "yUSD", chain: "Multi-chain", apy: 16.0, tvl: 45000000, type: "Vault", description: "Vaulted yUSD with boosted rewards" },
+            ],
+            gauntlet: [
+                { protocol: "Gauntlet USD Alpha", stablecoin: "USDC", chain: "Multi-chain", apy: 8.5, tvl: 250000000, type: "Risk-Managed", description: "Institutional-grade risk-adjusted yield" },
+                { protocol: "Gauntlet Prime USDC", stablecoin: "USDC", chain: "Ethereum", apy: 6.8, tvl: 180000000, type: "Conservative", description: "Low-risk conservative vault" },
+                { protocol: "Gauntlet Core USDT", stablecoin: "USDT", chain: "Base", apy: 9.2, tvl: 95000000, type: "Balanced", description: "Balanced risk-return vault" },
+            ],
+            pendle: [
+                { protocol: "Pendle PT-sUSDe", stablecoin: "USDe", chain: "Ethereum", apy: 12.3, tvl: 420000000, type: "Fixed Yield", description: "Fixed yield via principal tokens" },
+                { protocol: "Pendle YT-sDAI", stablecoin: "DAI", chain: "Ethereum", apy: 8.7, tvl: 156000000, type: "Yield Token", description: "Long yield exposure" },
+                { protocol: "Pendle PT-GYD", stablecoin: "GYD", chain: "Ethereum", apy: 10.5, tvl: 89000000, type: "Fixed Yield", description: "Gyroscope stablecoin yield" },
+            ],
+            merkl: [
+                { protocol: "Merkl Morpho USDC", stablecoin: "USDC", chain: "Ethereum", apy: 9.8, tvl: 145000000, type: "Incentivized", description: "Morpho lending with rewards" },
+                { protocol: "Merkl Aave USDT", stablecoin: "USDT", chain: "Ethereum", apy: 7.2, tvl: 198000000, type: "Incentivized", description: "Aave with additional incentives" },
+                { protocol: "Merkl Uniswap V3 USDC/USDT", stablecoin: "USDC/USDT", chain: "Base", apy: 11.5, tvl: 78000000, type: "LP Rewards", description: "Concentrated liquidity rewards" },
+            ],
+            gyroscope: [
+                { protocol: "Gyroscope GYD", stablecoin: "Multi-collateral", chain: "Ethereum", apy: 10.8, tvl: 125000000, type: "Superliquid", description: "Most efficient stablecoin liquidity" },
+                { protocol: "Gyroscope E-CLP", stablecoin: "GYD/USDC", chain: "Ethereum", apy: 15.2, tvl: 67000000, type: "LP", description: "Asymmetric liquidity pools" },
+            ]
+        };
+
+        const StablecoinYieldDashboard = () => {
+            const [selectedChain, setSelectedChain] = useState('All');
+            const [selectedType, setSelectedType] = useState('All');
+            const [selectedStablecoin, setSelectedStablecoin] = useState('All');
+            const [sortBy, setSortBy] = useState('apy');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                // Simulate loading
+                setTimeout(() => setLoading(false), 1500);
+            }, []);
+
+            // Flatten all yield opportunities
+            const allYields = useMemo(() => {
+                const yields = [];
+                Object.entries(mockYieldData).forEach(([source, opportunities]) => {
+                    opportunities.forEach(opp => {
+                        yields.push({ ...opp, source });
+                    });
+                });
+                return yields;
+            }, []);
+
+            // Filter and sort yields
+            const filteredYields = useMemo(() => {
+                let filtered = allYields.filter(yield_ => {
+                    const matchesChain = selectedChain === 'All' || yield_.chain === selectedChain || yield_.chain === 'Multi' || yield_.chain === 'Multi-chain';
+                    const matchesType = selectedType === 'All' || yield_.type === selectedType;
+                    const matchesStablecoin = selectedStablecoin === 'All' || yield_.stablecoin.includes(selectedStablecoin);
+                    const matchesSearch = searchTerm === '' || 
+                        yield_.protocol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        yield_.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                    return matchesChain && matchesType && matchesStablecoin && matchesSearch;
+                });
+
+                // Sort
+                filtered.sort((a, b) => {
+                    if (sortBy === 'apy') return b.apy - a.apy;
+                    if (sortBy === 'tvl') return b.tvl - a.tvl;
+                    return 0;
+                });
+
+                return filtered;
+            }, [allYields, selectedChain, selectedType, selectedStablecoin, sortBy, searchTerm]);
+
+            // Calculate statistics
+            const stats = useMemo(() => {
+                const totalTVL = allYields.reduce((sum, y) => sum + y.tvl, 0);
+                const avgAPY = allYields.reduce((sum, y) => sum + y.apy, 0) / allYields.length;
+                const maxAPY = Math.max(...allYields.map(y => y.apy));
+                const protocols = new Set(allYields.map(y => y.protocol)).size;
+                
+                return {
+                    totalTVL: (totalTVL / 1e9).toFixed(2),
+                    avgAPY: avgAPY.toFixed(2),
+                    maxAPY: maxAPY.toFixed(2),
+                    protocols
+                };
+            }, [allYields]);
+
+            const chains = ['All', 'Ethereum', 'Base', 'Avalanche', 'zkSync', 'Multi-chain'];
+            const types = ['All', 'Lending', 'LP', 'RWA', 'Delta Neutral', 'Staked', 'Fixed Yield', 'Incentivized', 'Risk-Managed'];
+            const stablecoins = ['All', 'USDC', 'USDT', 'DAI', 'USDe', 'GYD'];
+
+            const formatTVL = (tvl) => {
+                if (tvl >= 1e9) return `$${(tvl / 1e9).toFixed(2)}B`;
+                if (tvl >= 1e6) return `$${(tvl / 1e6).toFixed(1)}M`;
+                return `$${(tvl / 1e3).toFixed(0)}K`;
+            };
+
+            const getProtocolColor = (source) => {
+                const colors = {
+                    defillama: 'bg-blue-100 text-blue-800',
+                    midas: 'bg-yellow-100 text-yellow-800',
+                    avant: 'bg-purple-100 text-purple-800',
+                    noon: 'bg-green-100 text-green-800',
+                    yieldfi: 'bg-pink-100 text-pink-800',
+                    gauntlet: 'bg-indigo-100 text-indigo-800',
+                    pendle: 'bg-orange-100 text-orange-800',
+                    merkl: 'bg-teal-100 text-teal-800',
+                    gyroscope: 'bg-cyan-100 text-cyan-800',
+                };
+                return colors[source] || 'bg-gray-100 text-gray-800';
+            };
+
+            if (loading) {
+                return (
+                    <div className="max-w-7xl mx-auto mt-20">
+                        <div className="card p-8 text-center">
+                            <div className="loading-spinner"></div>
+                            <p className="text-gray-600 mt-4">Loading yield opportunities...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-7xl mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-8">
+                        <h1 className="text-5xl font-bold text-white mb-3">
+                            Stablecoin Yield Aggregator
+                        </h1>
+                        <p className="text-white text-lg opacity-90">
+                            Comprehensive data from Midas, Avant, Giro, Noon, YieldFi, Gauntlet, Pendle, Merkl, DeFi Llama & more
+                        </p>
+                    </div>
+
+                    {/* Statistics Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div className="card stat-card p-6">
+                            <div className="text-sm text-gray-600 mb-1">Total TVL</div>
+                            <div className="text-3xl font-bold gradient-text">${stats.totalTVL}B</div>
+                        </div>
+                        <div className="card stat-card p-6">
+                            <div className="text-sm text-gray-600 mb-1">Average APY</div>
+                            <div className="text-3xl font-bold gradient-text">{stats.avgAPY}%</div>
+                        </div>
+                        <div className="card stat-card p-6">
+                            <div className="text-sm text-gray-600 mb-1">Max APY</div>
+                            <div className="text-3xl font-bold gradient-text">{stats.maxAPY}%</div>
+                        </div>
+                        <div className="card stat-card p-6">
+                            <div className="text-sm text-gray-600 mb-1">Protocols</div>
+                            <div className="text-3xl font-bold gradient-text">{stats.protocols}</div>
+                        </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="card p-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                <input
+                                    type="text"
+                                    placeholder="Search protocols..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Chain</label>
+                                <select
+                                    value={selectedChain}
+                                    onChange={(e) => setSelectedChain(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                >
+                                    {chains.map(chain => (
+                                        <option key={chain} value={chain}>{chain}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                                <select
+                                    value={selectedType}
+                                    onChange={(e) => setSelectedType(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                >
+                                    {types.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Stablecoin</label>
+                                <select
+                                    value={selectedStablecoin}
+                                    onChange={(e) => setSelectedStablecoin(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                >
+                                    {stablecoins.map(coin => (
+                                        <option key={coin} value={coin}>{coin}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                >
+                                    <option value="apy">Highest APY</option>
+                                    <option value="tvl">Highest TVL</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Yield Opportunities */}
+                    <div className="card p-6">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                            Yield Opportunities ({filteredYields.length})
+                        </h2>
+                        <div className="space-y-4">
+                            {filteredYields.map((yield_, index) => (
+                                <div key={index} className="yield-card border border-gray-200 rounded-lg p-5 hover:border-purple-300">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                                        <div className="flex-1 mb-3 md:mb-0">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <h3 className="text-lg font-bold text-gray-800">{yield_.protocol}</h3>
+                                                <span className={`protocol-badge ${getProtocolColor(yield_.source)}`}>
+                                                    {yield_.source.charAt(0).toUpperCase() + yield_.source.slice(1)}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-600 mb-2">{yield_.description}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
+                                                    {yield_.stablecoin}
+                                                </span>
+                                                <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
+                                                    {yield_.chain}
+                                                </span>
+                                                <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
+                                                    {yield_.type}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2 min-w-[140px]">
+                                            <div className="text-right">
+                                                <div className="text-3xl font-bold text-green-600">
+                                                    {yield_.apy.toFixed(2)}%
+                                                </div>
+                                                <div className="text-xs text-gray-500">APY</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-lg font-semibold text-gray-700">
+                                                    {formatTVL(yield_.tvl)}
+                                                </div>
+                                                <div className="text-xs text-gray-500">TVL</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        {filteredYields.length === 0 && (
+                            <div className="text-center py-12">
+                                <p className="text-gray-500">No opportunities found matching your filters.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Data Sources */}
+                    <div className="card p-6 mt-6">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Data Sources</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            {Object.keys(mockYieldData).map(source => (
+                                <div key={source} className={`protocol-badge ${getProtocolColor(source)} text-center py-2`}>
+                                    {source.charAt(0).toUpperCase() + source.slice(1)}
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-sm text-gray-600 mt-4">
+                            This dashboard aggregates yield opportunities from leading DeFi protocols and stablecoin platforms. 
+                            Data is updated regularly to provide the most current yield information across multiple chains and strategies.
+                        </p>
+                    </div>
+
+                    {/* Disclaimer */}
+                    <div className="card p-6 mt-6 bg-yellow-50">
+                        <h3 className="text-lg font-bold text-yellow-800 mb-2">⚠️ Important Disclaimer</h3>
+                        <p className="text-sm text-yellow-700">
+                            This dashboard is for informational purposes only. APYs are subject to change and past performance 
+                            does not guarantee future results. Always conduct your own research (DYOR) and understand the risks 
+                            before deploying capital. DeFi protocols carry smart contract risk, market risk, and other potential 
+                            vulnerabilities. Never invest more than you can afford to lose.
+                        </p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="text-center mt-8 mb-4">
+                        <p className="text-white text-sm opacity-75">
+                            Built with React • Data from multiple sources • Not financial advice
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<StablecoinYieldDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
